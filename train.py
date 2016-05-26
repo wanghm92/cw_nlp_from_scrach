@@ -17,6 +17,7 @@ from utils import *
 from ffn import *
 
 _EMBEDDING_DIM = 100
+_FEAT_EMBEDDING_DIM = 5
 _HIDDEN_DIM = 360
 _LABEL_DIM = 45
 
@@ -32,7 +33,7 @@ def contextWin(data_set, winsz):
 
     return ngrams
 
-def test_with_trained_model(model, data, label, epoch, print_progress=False, load_model=False):
+def test_with_trained_model(model, data, feat, label, epoch, print_progress=False, load_model=False):
     print print_progress
 
     if load_model:
@@ -40,14 +41,15 @@ def test_with_trained_model(model, data, label, epoch, print_progress=False, loa
     
     counter = 0
     total = len(data)
+    assert len(data) == len(feat) == len(label)
     tic = time.time()
     
     result = list()
 
-    for s in data:
+    for d, f in zip(data,feat):
         counter += 1
 
-        result.append(model.predict([s])[0]+1)
+        result.append(model.predict([d],[f])[0])
 
         if print_progress:
             print '[testing] example %i >> %2.2f%%'%(counter,(counter+1)*100./total),'completed in %.2f (sec) <<\r'%(time.time()-tic),
@@ -107,22 +109,44 @@ def main():
     # Section 1 Read Data #
     #######################
 
-    train_set,train_label,test_set,test_label,dev_set,dev_label,input_vocab,output_vocab = readData(winsz)
+    train_set,train_label,train_cap,test_set,test_label,test_cap,dev_set,dev_label,dev_cap,input_vocab,output_vocab,cap_vocab = readData(winsz)
 
     vocab_size = len(input_vocab)
     output_vocab_size = len(output_vocab)
+    cap_vocab_size = len(cap_vocab)
 
     train_ngrams = contextWin(train_set, winsz)
     test_ngrams = contextWin(test_set,winsz)
     dev_ngrams = contextWin(dev_set,winsz)
 
+    train_cap_ngrams = contextWin(train_cap, winsz)
+    test_cap_ngrams = contextWin(test_cap, winsz)
+    dev_cap_ngrams = contextWin(dev_cap, winsz)
+    
     train_label = [i for sub in train_label for i in sub]
     test_label = [i for sub in test_label for i in sub]
     dev_label = [i for sub in dev_label for i in sub]
 
-    assert len(train_ngrams) == len(train_label)
-    assert len(test_ngrams) == len(test_label)
-    assert len(dev_ngrams) == len(dev_label)
+    assert len(train_ngrams) == len(train_cap_ngrams) == len(train_label)
+    assert len(test_ngrams) == len(test_cap_ngrams) ==len(test_label)
+    assert len(dev_ngrams) == len(dev_cap_ngrams) ==len(dev_label)
+
+    print 'train_set: ', train_set[:10]
+    print 'train_label: ', train_label[:10]
+    print 'train_cap: ', train_cap[:10]
+    print 'train_ngrams: ', train_ngrams[:10]
+    print 'train_cap_ngrams: ', train_cap_ngrams[:10]
+    print 'test_set: ', test_set[:10]
+    print 'test_label: ', test_label[:10]
+    print 'test_cap: ', test_cap[:10]
+    print 'test_ngrams: ', test_ngrams[:10]
+    print 'test_cap_ngrams: ', test_cap_ngrams[:10]
+    print 'dev_set: ', dev_set[:10]
+    print 'dev_label: ', dev_label[:10]
+    print 'dev_cap: ', dev_cap[:10]
+    print 'dev_ngrams: ', dev_ngrams[:10]
+    print 'dev_cap_ngrams: ', dev_cap_ngrams[:10]
+    print 'vocab size = %d' % vocab_size
 
     ####################################
     # Section 2 Initialize Model Graph #
@@ -131,7 +155,7 @@ def main():
     num_iter = len(train_ngrams) // batch_size + 1
     print "num_iter = %d" % num_iter
     
-    model = FFNTheano(winsz, vocab_size)
+    model = FFNTheano(winsz, vocab_size, cap_vocab_size)
 
     #########################
     # Section 3 Train Model #
@@ -154,13 +178,15 @@ def main():
             for j in range(num_iter):
 
                 if j == num_iter-1:
-                    ngram = np.asarray(train_ngrams[j*batch_size:])
-                    label = np.eye(_LABEL_DIM)[(np.array(train_label[j*batch_size:])- 1).tolist()]
+                    t_ngram = np.asarray(train_ngrams[j*batch_size:])
+                    c_ngram = np.asarray(train_cap_ngrams[j*batch_size:])
+                    label = np.eye(_LABEL_DIM)[(np.array(train_label[j*batch_size:])).tolist()]
                 else:
-                    ngram = np.asarray(train_ngrams[j*batch_size:(j+1)*batch_size])
-                    label = np.eye(_LABEL_DIM)[(np.array(train_label[j*batch_size:(j+1)*batch_size])- 1).tolist()]
+                    t_ngram = np.asarray(train_ngrams[j*batch_size:(j+1)*batch_size])
+                    c_ngram = np.asarray(train_cap_ngrams[j*batch_size:(j+1)*batch_size])
+                    label = np.eye(_LABEL_DIM)[(np.array(train_label[j*batch_size:(j+1)*batch_size])).tolist()]
 
-                total_loss += model.gradient_step(ngram, label, lr)            
+                total_loss += model.gradient_step(t_ngram, c_ngram, label, lr)
 
                 if print_progress:
                     print '[learning] epoch %i >> %2.2f%%'%(i,(j+1)*100./num_iter),'completed in %.2f (sec) <<\r'%(time.time()-tic),
@@ -170,13 +196,13 @@ def main():
 
             if dev:
                 print "Testing on dev set for Epoch %d ......" %i
-                accuracy = test_with_trained_model(model, dev_ngrams, dev_label, i, print_progress, False)
+                accuracy = test_with_trained_model(model, dev_ngrams, dev_cap_ngrams, dev_label, i, print_progress, False)
                 print "Dev accuracy after %d epochs of training : %2.2f%%" %(i, accuracy)
                 ws.write(i,0,accuracy)
 
             if i%5 == 0:
                 print "Testing on training set for Epoch %d ......" %i
-                accuracy = test_with_trained_model(model, train_ngrams, train_label, i, print_progress,False)
+                accuracy = test_with_trained_model(model, train_ngrams, train_cap_ngrams, train_label, i, print_progress,False)
                 print "Training accuracy after %d epochs of training : %2.2f%%" %(i, accuracy)
                 ws.write(i,1,accuracy)
 
@@ -193,11 +219,11 @@ def main():
 
     elif test:
 
-        accuracy = test_with_trained_model(model, test_ngrams, test_label, test_epoch, print_progress,True)
+        accuracy = test_with_trained_model(model, test_ngrams, test_cap_ngrams, test_label, test_epoch, print_progress,True)
 
-        ws.write(test_epoch-1,2,accuracy)
+        ws.write(test_epoch,2,accuracy)
         ws.write(0,3,"Test Epoch")
-        ws.write(test_epoch-1,3,test_epoch)
+        ws.write(test_epoch,3,test_epoch)
 
         print "Accuracy = %2.2f%%" %accuracy
 

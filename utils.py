@@ -29,7 +29,7 @@ dev_feat_file = path.join(data_path,'dev.dat')
 dev_label_file = path.join(data_path,'dev.label.dat')
 
 input_vocab_file = path.join(data_path,'input.vocab')
-input_feat_vocab_file = path.join(data_path,'input.features.vocab')
+cap_vocab_file = path.join(data_path,'input.features.vocab')
 output_vocab_file = path.join(data_path,'output.vocab')
 
 model_para_output_file = path.join(model_path,'model')
@@ -54,16 +54,26 @@ def readData(winsz):
     def readDataSet(winsz,file):
 
         data_set = list()
+        data_cap = list()
 
         with open(file) as f:
             for line in f:
-                padded_line = [re.sub(r'(-?\d+)','NUMBER',a) for a in line.lower().strip().split()]
+                # padded_line = [re.sub(r'(-?\d+)','NUMBER',a) for a in line.lower().strip().split()]
+                
+                temp = line.strip().split()
+                padded_line = [i.split('_')[0] for i in temp]
+                data_cap_line = [i.split('_')[1] for i in temp]
+
                 for i in range(winsz/2):
                     padded_line.insert(0,_PADDING)
+                    data_cap_line.insert(0,_PADDING)
                     padded_line.append(_PADDING)
+                    data_cap_line.append(_PADDING)
+
+                data_cap.append(data_cap_line)
                 data_set.append(padded_line)
 
-        return data_set
+        return data_set, data_cap
 
     def readLabel(file):
         
@@ -82,7 +92,6 @@ def readData(winsz):
         i = 0
         with open(file) as f:  
             for line in f:
-                i+=1
                 if isInput:
                     line = line.strip()
                 else:
@@ -90,31 +99,40 @@ def readData(winsz):
 
                 vocab.append(line)
                 vocab_dict[line] = i
+                i+=1
 
         return vocab, vocab_dict
 
     input_vocab, input_vocab_dict = readVocab(input_vocab_file,True)
     output_vocab, output_vocab_dict = readVocab(output_vocab_file,False)
+    cap_vocab, cap_vocab_dict = readVocab(cap_vocab_file,False)
 
     input_vocab_index = range(1,len(input_vocab)+1)
     output_vocab_index = range(1,len(output_vocab)+1)
+    cap_vocab_index = range(1,len(cap_vocab)+1)
 
-    train_set = readDataSet(winsz,train_file)
+    # Training Set
+    train_set, train_cap = readDataSet(winsz,train_feat_file)
     train_index = [[input_vocab_dict[w] if w in input_vocab_dict else input_vocab_dict[_UNKNOWN] for w in t] for t in train_set]
+    train_cap_index = [[cap_vocab.index(x) for x in l] for l in train_cap]
     train_label = readLabel(train_label_file)
-    train_label_index = [[output_vocab.index(x)+1 for x in l] for l in train_label]
+    train_label_index = [[output_vocab.index(x) for x in l] for l in train_label]
 
-    test_set = readDataSet(winsz,test_file)
+    # Test Set
+    test_set, test_cap = readDataSet(winsz,test_feat_file)
     test_index = [[input_vocab_dict[w] if w in input_vocab_dict else input_vocab_dict[_UNKNOWN] for w in t] for t in test_set]
+    test_cap_index = [[cap_vocab.index(x) for x in l] for l in test_cap]
     test_label = readLabel(test_label_file)
-    test_label_index = [[output_vocab.index(x)+1 for x in l] for l in test_label]
+    test_label_index = [[output_vocab.index(x) for x in l] for l in test_label]
 
-    dev_set = readDataSet(winsz,dev_file)
+    # Dev Set
+    dev_set, dev_cap = readDataSet(winsz,dev_feat_file)
     dev_index = [[input_vocab_dict[w] if w in input_vocab_dict else input_vocab_dict[_UNKNOWN] for w in t] for t in dev_set]
+    dev_cap_index = [[cap_vocab.index(x) for x in l] for l in dev_cap]
     dev_label = readLabel(dev_label_file)
-    dev_label_index = [[output_vocab.index(x)+1 for x in l] for l in dev_label]
+    dev_label_index = [[output_vocab.index(x) for x in l] for l in dev_label]
 
-    return train_index,train_label_index,test_index,test_label_index,dev_index,dev_label_index,input_vocab_index,output_vocab_index
+    return train_index,train_label_index,train_cap_index,test_index,test_label_index,test_cap_index,dev_index,dev_label_index,dev_cap_index,input_vocab_index,output_vocab_index,cap_vocab_index
 
 ########################
 # Section 2 Save Model #
@@ -125,8 +143,8 @@ def save_model_parameters_theano(outfile, model):
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
-    window_size, word_dim, embedding_dim, hidden_dim, input_dim, label_dim, lt, w1, b1, w2, b2 = model.window_size, model.word_dim, model.embedding_dim, model.hidden_dim, model.input_dim, model.label_dim, model.lt.get_value(), model.w1.get_value(), model.b1.get_value(), model.w2.get_value(), model.b2.get_value()
-    np.savez(outfile, window_size=window_size, word_dim=word_dim, embedding_dim=embedding_dim, hidden_dim=hidden_dim, input_dim=input_dim, label_dim=label_dim, lt=lt, w1=w1, b1=b1, w2=w2, b2=b2)
+    window_size, word_dim, feat_dim, embedding_dim, hidden_dim, input_dim, label_dim, lt, cap_lt, w1, b1, w2, b2 = model.window_size, model.word_dim, model.feat_dim, model.embedding_dim, model.hidden_dim, model.input_dim, model.label_dim, model.lt.get_value(), model.cap_lt.get_value(), model.w1.get_value(), model.b1.get_value(), model.w2.get_value(), model.b2.get_value()
+    np.savez(outfile, window_size=window_size, word_dim=word_dim, feat_dim=feat_dim, embedding_dim=embedding_dim, hidden_dim=hidden_dim, input_dim=input_dim, label_dim=label_dim, lt=lt, cap_lt=cap_lt, w1=w1, b1=b1, w2=w2, b2=b2)
     print "Saved model parameters to %s." % outfile
 
 ########################
@@ -138,11 +156,13 @@ def load_model_parameters_theano(path, model):
 
     window_size = npzfile["window_size"]
     word_dim = npzfile["word_dim"]
+    feat_dim = npzfile["feat_dim"]
     embedding_dim = npzfile["embedding_dim"]
     hidden_dim = npzfile["hidden_dim"]
     input_dim = npzfile["input_dim"]
     label_dim = npzfile["label_dim"]
     lt = npzfile["lt"]
+    cap_lt = npzfile["cap_lt"]
     w1 = npzfile["w1"]
     b1 = npzfile["b1"]
     w2 = npzfile["w2"]
@@ -150,17 +170,19 @@ def load_model_parameters_theano(path, model):
 
     model.window_size = window_size
     model.word_dim = word_dim
+    model.feat_dim = feat_dim
     model.embedding_dim = embedding_dim
     model.hidden_dim = hidden_dim
     model.input_dim = input_dim
     model.label_dim = label_dim
     model.lt.set_value(lt)
+    model.cap_lt.set_value(cap_lt)
     model.w1.set_value(w1)
     model.b1.set_value(b1)
     model.w2.set_value(w2)
     model.b2.set_value(b2)
 
-    print "Loaded model parameters from\n \"%s\"\nwindow_size = %d, word_dim (vocab size) = %d, embedding_dim = %d,  hidden_dim = %d, input_dim = %d, label_dim = %d\n" % (path, window_size, word_dim, embedding_dim, hidden_dim, input_dim, label_dim), "Dimensions of layers: shape of lt = %s, w1 = %s, b1 = %s, w2 = %s, b2 = %s" % (lt.shape, w1.shape, b1.shape, w2.shape, b2.shape,)
+    print "Loaded model parameters from\n \"%s\"\nwindow_size = %d, word_dim (vocab size) = %d, feat_dim = %d, embedding_dim = %d,  hidden_dim = %d, input_dim = %d, label_dim = %d\n" % (path, window_size, word_dim, feat_dim, embedding_dim, hidden_dim, input_dim, label_dim), "Dimensions of layers: shape of lt = %s, cap_lt = %s, w1 = %s, b1 = %s, w2 = %s, b2 = %s" % (lt.shape, cap_lt.shape, w1.shape, b1.shape, w2.shape, b2.shape,)
 
 ############################
 # Section 4 Gradient Check #

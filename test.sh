@@ -1,0 +1,1 @@
+for i in {35,36,37,38,39,40}; do echo "Testing Epoch $i"; THEANO_FLAGS=mode=FAST_RUN,device=gpu3,cuda.root=/usr/local/cuda,floatX=float32 python train.py --test --test_epoch=$i --write_to_existing_excel --print_progress; done
