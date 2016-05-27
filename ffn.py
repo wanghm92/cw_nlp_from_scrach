@@ -3,7 +3,7 @@ import theano as theano
 import theano.tensor as T
 from collections import OrderedDict
 
-_EMBEDDING_DIM = 100
+_EMBEDDING_DIM = 50
 _FEAT_EMBEDDING_DIM = 5
 _HIDDEN_DIM = 360
 _LABEL_DIM = 45
@@ -24,8 +24,6 @@ class FFNTheano:
         self.input_dim = input_dim
         self.label_dim = label_dim
         
-        self.dims = np.array([1, 1, self.input_dim, self.hidden_dim, self.hidden_dim, self.label_dim], dtype=np.float32)
-
         # lt = np.random.randn(word_dim, embedding_dim)
         # lt = np.random.uniform(-np.sqrt(12./np.sqrt(word_dim)), np.sqrt(12./np.sqrt(word_dim)),(word_dim, embedding_dim))
         lt = np.random.uniform(-np.sqrt(1./np.sqrt(word_dim)), np.sqrt(1./np.sqrt(word_dim)),(word_dim, embedding_dim))
@@ -46,6 +44,7 @@ class FFNTheano:
         self.w2 = theano.shared(name='w2', value=w2.astype(theano.config.floatX))      
         self.b2 = theano.shared(name='b2', value=b2.astype(theano.config.floatX))
 
+        self.dims = np.array([1, 1, self.input_dim, self.input_dim, self.hidden_dim, self.hidden_dim], dtype=np.float32)
         self.params = [self.lt, self.cap_lt, self.w1, self.b1, self.w2, self.b2]
 
         self.__theano_build__()

@@ -16,7 +16,7 @@ from theano import printing
 from utils import *
 from ffn import *
 
-_EMBEDDING_DIM = 100
+_EMBEDDING_DIM = 50
 _FEAT_EMBEDDING_DIM = 5
 _HIDDEN_DIM = 360
 _LABEL_DIM = 45
@@ -33,8 +33,7 @@ def contextWin(data_set, winsz):
 
     return ngrams
 
-def test_with_trained_model(model, data, feat, label, epoch, print_progress=False, load_model=False):
-    print print_progress
+def test_with_trained_model(model, data, feat, label, epoch, print_progress=False, load_model=False, write_to_file=False):
 
     if load_model:
         load_model_parameters_theano(model_para_output_file+"_%depochs.npz"%epoch, model)
@@ -45,6 +44,7 @@ def test_with_trained_model(model, data, feat, label, epoch, print_progress=Fals
     tic = time.time()
     
     result = list()
+    tuples = list()
 
     for d, f in zip(data,feat):
         counter += 1
@@ -57,9 +57,12 @@ def test_with_trained_model(model, data, feat, label, epoch, print_progress=Fals
 
     correct = [i for i, j in zip(result, label) if i == j]
 
+    if write_to_file:
+        tuples = [[d[2],r,l] for d,r,l in zip (data, label, result)]
+
     acc = len(correct)*100./total
 
-    return acc
+    return acc, tuples
 
 def main():
 
@@ -70,7 +73,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--lr', type=float, default=0.01, action='store')
     parser.add_argument('--winsz', type=int, default=5, action='store')
-    parser.add_argument('--epoch', type=int, default=20, action='store')
+    parser.add_argument('--epoch', type=int, default=40, action='store')
     parser.add_argument('--batchsize', type=int, default=50, action='store')
     parser.add_argument('--test_epoch', type=int, action='store')
     parser.add_argument('--cont_epoch', type=int, action='store')
@@ -81,6 +84,7 @@ def main():
     parser.add_argument('--iscontinue', action='store_true')
     parser.add_argument('--print_progress', action='store_true')
     parser.add_argument('--write_to_existing_excel', action='store_true')
+    parser.add_argument('--uselm', action='store_true')
 
     args = parser.parse_args()
 
@@ -95,6 +99,7 @@ def main():
     iscontinue = args.iscontinue
     print_progress = args.print_progress
     write_to_existing_excel = args.write_to_existing_excel
+    uselm = args.uselm
 
     if write_to_existing_excel:
         rb = open_workbook(excel_filename)
@@ -109,7 +114,7 @@ def main():
     # Section 1 Read Data #
     #######################
 
-    train_set,train_label,train_cap,test_set,test_label,test_cap,dev_set,dev_label,dev_cap,input_vocab,output_vocab,cap_vocab = readData(winsz)
+    train_set,train_label,train_cap,test_set,test_label,test_cap,dev_set,dev_label,dev_cap,input_vocab,output_vocab,cap_vocab, input_vocab_words, output_vocab_words = readData(winsz)
 
     vocab_size = len(input_vocab)
     output_vocab_size = len(output_vocab)
@@ -157,6 +162,10 @@ def main():
     
     model = FFNTheano(winsz, vocab_size, cap_vocab_size)
 
+    if uselm:
+        lookTb = np.load(infile)['embeddings']
+        model.lt.set_value(lookTb)
+
     #########################
     # Section 3 Train Model #
     #########################
@@ -196,13 +205,13 @@ def main():
 
             if dev:
                 print "Testing on dev set for Epoch %d ......" %i
-                accuracy = test_with_trained_model(model, dev_ngrams, dev_cap_ngrams, dev_label, i, print_progress, False)
+                accuracy = test_with_trained_model(model, dev_ngrams, dev_cap_ngrams, dev_label, i, print_progress, False, False)[0]
                 print "Dev accuracy after %d epochs of training : %2.2f%%" %(i, accuracy)
                 ws.write(i,0,accuracy)
 
             if i%5 == 0:
                 print "Testing on training set for Epoch %d ......" %i
-                accuracy = test_with_trained_model(model, train_ngrams, train_cap_ngrams, train_label, i, print_progress,False)
+                accuracy = test_with_trained_model(model, train_ngrams, train_cap_ngrams, train_label, i, print_progress,False, False)[0]
                 print "Training accuracy after %d epochs of training : %2.2f%%" %(i, accuracy)
                 ws.write(i,1,accuracy)
 
@@ -217,9 +226,21 @@ def main():
     # Section 4 Test Model #
     ########################
 
-    elif test:
+    if test:
 
-        accuracy = test_with_trained_model(model, test_ngrams, test_cap_ngrams, test_label, test_epoch, print_progress,True)
+        accuracy, tuples = test_with_trained_model(model, test_ngrams, test_cap_ngrams, test_label, test_epoch, print_progress,True, True)
+        print tuples[:10]
+        print np.array(tuples).shape
+
+        f = open(test_output_filename,'w')
+
+        for i in tuples:
+            w = input_vocab_words[i[0]]
+            c = output_vocab_words[i[1]]
+            g = output_vocab_words[i[2]]
+            f.write("%s %s %s\n"%(w,c,g))
+
+        f.close()
 
         ws.write(test_epoch,2,accuracy)
         ws.write(0,3,"Test Epoch")

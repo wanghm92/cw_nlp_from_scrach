@@ -35,6 +35,8 @@ output_vocab_file = path.join(data_path,'output.vocab')
 model_para_output_file = path.join(model_path,'model')
 # model_para_input_file = path.join(model_path, 'model.npz')
 excel_filename = path.join(output_path,'stats.xls')
+test_output_filename = path.join(output_path,'test_output.txt')
+infile = path.abspath('../../data/lookuptable.npz')
 
 _PADDING = '<s>'
 _UNKNOWN = '<unk>'
@@ -132,7 +134,7 @@ def readData(winsz):
     dev_label = readLabel(dev_label_file)
     dev_label_index = [[output_vocab.index(x) for x in l] for l in dev_label]
 
-    return train_index,train_label_index,train_cap_index,test_index,test_label_index,test_cap_index,dev_index,dev_label_index,dev_cap_index,input_vocab_index,output_vocab_index,cap_vocab_index
+    return train_index,train_label_index,train_cap_index,test_index,test_label_index,test_cap_index,dev_index,dev_label_index,dev_cap_index,input_vocab_index,output_vocab_index,cap_vocab_index,input_vocab, output_vocab
 
 ########################
 # Section 2 Save Model #
